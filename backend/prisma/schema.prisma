@@ -1,0 +1,256 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  password     String
+  role         Role     @default(EMPLOYEE)
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  transactions ToolTransaction[]
+  borrowedTools ToolBorrowing[]
+  
+  @@map("users")
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique // "Mechanical", "Electrical", "Safety"
+  code      String   @unique // "MECH", "ELEC", "SAFE"
+  createdAt DateTime @default(now())
+  
+  // Relations
+  users     User[]
+  tools     Tool[]
+  
+  @@map("departments")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  tools Tool[]
+  
+  @@map("categories")
+}
+
+model Tool {
+  id                    Int       @id @default(autoincrement())
+  name                  String
+  brand                 String?
+  model                 String?
+  serialNumber          String?   @unique
+  
+  
+  // Inventory Management
+  totalQuantity         Int       @default(0)
+  availableQuantity     Int       @default(0)
+  minimumStockLevel     Int       @default(1)
+  
+  // Tool Specifications
+  specifications        Json?     // Store tool-specific data (torque values, load ratings, etc.)
+  
+  // Location
+  storageLocation       String?   // "Shelf A-3, Bin 7"
+  storageCode           String?   // "A3-B7"
+  
+  // Calibration & Maintenance
+  requiresCalibration   Boolean   @default(false)
+  calibrationInterval   Int?      // in days
+  lastCalibrationDate   DateTime?
+  nextCalibrationDate   DateTime?
+  calibrationStatus     CalibrationStatus @default(VALID)
+  
+  requiresMaintenance   Boolean   @default(false)
+  maintenanceInterval   Int?      // in days
+  lastMaintenanceDate   DateTime?
+  nextMaintenanceDate   DateTime?
+  
+  // Load Testing (for lifting equipment)
+  requiresLoadTest      Boolean   @default(false)
+  loadTestInterval      Int?      // in days
+  lastLoadTestDate      DateTime?
+  nextLoadTestDate      DateTime?
+  safeWorkingLoad       Float?    // in tons/kg
+  
+  // Status
+  status                ToolStatus @default(ACTIVE)
+  condition             ToolCondition @default(GOOD)
+  
+  // Timestamps
+  purchaseDate          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  // Relations
+  category              Category  @relation(fields: [categoryId], references: [id])
+  categoryId            Int
+  department            Department @relation(fields: [departmentId], references: [id])
+  departmentId          Int
+  
+  transactions          ToolTransaction[]
+  borrowings            ToolBorrowing[]
+  calibrationRecords    CalibrationRecord[]
+  maintenanceRecords    MaintenanceRecord[]
+  
+  @@map("tools")
+}
+
+model ToolTransaction {
+  id          Int             @id @default(autoincrement())
+  type        TransactionType
+  quantity    Int             @default(1)
+  notes       String?
+  createdAt   DateTime        @default(now())
+  
+  // Relations
+  tool        Tool     @relation(fields: [toolId], references: [id])
+  toolId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  
+  @@map("tool_transactions")
+}
+
+model ToolBorrowing {
+  id                Int      @id @default(autoincrement())
+  quantity          Int      @default(1)
+  borrowDate        DateTime @default(now())
+  expectedReturnDate DateTime
+  actualReturnDate  DateTime?
+  status            BorrowingStatus @default(BORROWED)
+  notes             String?
+  
+  // Relations
+  tool              Tool     @relation(fields: [toolId], references: [id])
+  toolId            Int
+  borrower          User     @relation(fields: [borrowerId], references: [id])
+  borrowerId        Int
+  
+  @@map("tool_borrowings")
+}
+
+model CalibrationRecord {
+  id                Int      @id @default(autoincrement())
+  calibrationDate   DateTime
+  nextDueDate       DateTime
+  calibratedBy      String   // Third party company/person
+  certificateNumber String?
+  result            CalibrationResult
+  notes             String?
+  cost              Float?
+  
+  // Relations
+  tool              Tool     @relation(fields: [toolId], references: [id])
+  toolId            Int
+  
+  @@map("calibration_records")
+}
+
+model MaintenanceRecord {
+  id              Int      @id @default(autoincrement())
+  maintenanceDate DateTime
+  nextDueDate     DateTime?
+  maintenanceType String   // "Routine", "Repair", "Replacement"
+  performedBy     String
+  description     String
+  cost            Float?
+  partsReplaced   String?
+  
+  // Relations
+  tool            Tool     @relation(fields: [toolId], references: [id])
+  toolId          Int
+  
+  @@map("maintenance_records")
+}
+
+// Enums
+enum Role {
+  EMPLOYEE
+  SUPERVISOR  
+  TOOL_KEEPER
+  ADMIN
+  
+  @@map("user_roles")
+}
+
+enum TransactionType {
+  ISSUE
+  RETURN
+  DAMAGE
+  CALIBRATION
+  MAINTENANCE
+  STOCK_IN
+  STOCK_OUT
+  LOST
+  
+  @@map("transaction_types")
+}
+
+enum BorrowingStatus {
+  BORROWED
+  RETURNED
+  OVERDUE
+  LOST
+  DAMAGED
+  
+  @@map("borrowing_statuses")
+}
+
+enum ToolStatus {
+  ACTIVE
+  INACTIVE
+  RETIRED
+  DAMAGED
+  IN_CALIBRATION
+  IN_MAINTENANCE
+  LOST
+  
+  @@map("tool_statuses")
+}
+
+enum ToolCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  DAMAGED
+  
+  @@map("tool_conditions")
+}
+
+enum CalibrationStatus {
+  VALID
+  EXPIRED
+  DUE_SOON
+  OVERDUE
+  NOT_REQUIRED
+  
+  @@map("calibration_statuses")
+}
+
+enum CalibrationResult {
+  PASS
+  FAIL
+  CONDITIONAL_PASS
+  
+  @@map("calibration_results")
+}
